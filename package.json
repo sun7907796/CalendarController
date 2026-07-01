@@ -1,0 +1,32 @@
+{
+  "name": "calendar-controller",
+  "version": "1.0.0",
+  "description": "桌面行事曆小工具，可編輯行程並與 Google 日曆雙向同步",
+  "main": "main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.deom.calendarcontroller",
+    "productName": "CalendarController",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "google/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

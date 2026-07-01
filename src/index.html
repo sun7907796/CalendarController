@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>行事曆同步小工具</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="nav">
+      <button id="prevBtn" title="上個月">‹</button>
+      <button id="todayBtn">今天</button>
+      <button id="nextBtn" title="下個月">›</button>
+      <h1 id="monthLabel"></h1>
+    </div>
+    <div class="actions">
+      <span id="googleStatus" class="status">Google：未連線</span>
+      <button id="importBtn">匯入憑證</button>
+      <button id="signInBtn">登入 Google</button>
+      <button id="signOutBtn" class="hidden">登出</button>
+      <button id="syncBtn" class="primary" disabled>同步</button>
+    </div>
+  </header>
+
+  <div id="weekdays" class="weekdays"></div>
+  <div id="grid" class="grid"></div>
+
+  <footer class="statusbar">
+    <span id="statusMsg">就緒</span>
+  </footer>
+
+  <!-- 事件編輯對話框 -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="modalTitle">新增事件</h2>
+      <label>標題<input type="text" id="fTitle" /></label>
+      <label>日期<input type="date" id="fDate" /></label>
+      <label class="checkbox"><input type="checkbox" id="fAllDay" /> 全天</label>
+      <div id="timeRow" class="time-row">
+        <label>開始<input type="time" id="fStart" /></label>
+        <label>結束<input type="time" id="fEnd" /></label>
+      </div>
+      <label>地點<input type="text" id="fLocation" /></label>
+      <label>說明<textarea id="fDesc" rows="3"></textarea></label>
+      <div id="gLink" class="glink hidden">已與 Google 同步</div>
+      <div class="modal-actions">
+        <button id="deleteBtn" class="danger hidden">刪除</button>
+        <span class="spacer"></span>
+        <button id="cancelBtn">取消</button>
+        <button id="saveBtn" class="primary">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 同步結果對話框 -->
+  <div id="logModal" class="modal hidden">
+    <div class="modal-box">
+      <h2>同步結果</h2>
+      <pre id="logContent" class="log"></pre>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button id="logCloseBtn" class="primary">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

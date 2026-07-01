@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+
+# 使用者本機憑證與資料（切勿提交）
+credentials.json
+token.json
+events.json

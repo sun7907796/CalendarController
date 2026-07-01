@@ -314,15 +314,35 @@ function bindEvents() {
     document.getElementById('logModal').classList.add('hidden');
   });
 
+  // 使用說明
+  document.getElementById('helpBtn').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.remove('hidden');
+  });
+  document.getElementById('helpCloseBtn').addEventListener('click', () => {
+    document.getElementById('helpModal').classList.add('hidden');
+  });
+
   // 點對話框背景關閉
   document.getElementById('modal').addEventListener('click', (e) => {
     if (e.target.id === 'modal') closeModal();
   });
+  document.getElementById('helpModal').addEventListener('click', (e) => {
+    if (e.target.id === 'helpModal') e.currentTarget.classList.add('hidden');
+  });
+  document.getElementById('logModal').addEventListener('click', (e) => {
+    if (e.target.id === 'logModal') e.currentTarget.classList.add('hidden');
+  });
 
-  // 鍵盤：Esc 關閉、Enter 儲存
+  // 鍵盤：Esc 關閉最上層對話框
   document.addEventListener('keydown', (e) => {
-    const modalOpen = !document.getElementById('modal').classList.contains('hidden');
-    if (e.key === 'Escape' && modalOpen) closeModal();
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('helpModal').classList.contains('hidden')) {
+      document.getElementById('helpModal').classList.add('hidden');
+    } else if (!document.getElementById('logModal').classList.contains('hidden')) {
+      document.getElementById('logModal').classList.add('hidden');
+    } else if (!document.getElementById('modal').classList.contains('hidden')) {
+      closeModal();
+    }
   });
 }
 

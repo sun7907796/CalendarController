@@ -321,6 +321,20 @@ function bindEvents() {
   document.getElementById('helpCloseBtn').addEventListener('click', () => {
     document.getElementById('helpModal').classList.add('hidden');
   });
+  document.getElementById('openDataDirBtn').addEventListener('click', () => {
+    window.api.openDataDir();
+  });
+
+  // 開機自動啟動勾選
+  document.getElementById('autoStartChk').addEventListener('change', async (e) => {
+    const on = await window.api.setAutoStart(e.target.checked);
+    document.getElementById('autoStartChk').checked = on;
+    setStatus(on ? '已設定開機時自動啟動' : '已取消開機自動啟動');
+  });
+  // 從系統匣選單切換時同步勾選狀態
+  window.api.onAutoStartChanged((v) => {
+    document.getElementById('autoStartChk').checked = v;
+  });
 
   // 點對話框背景關閉
   document.getElementById('modal').addEventListener('click', (e) => {
@@ -357,6 +371,15 @@ async function init() {
   events = await window.api.loadEvents();
   renderCalendar();
   await refreshGoogleStatus();
+
+  // 應用程式資訊與開機自啟狀態
+  try {
+    const info = await window.api.appInfo();
+    document.getElementById('appVersion').textContent = '版本 v' + info.version;
+    const auto = await window.api.getAutoStart();
+    document.getElementById('autoStartChk').checked = !!auto;
+  } catch (e) { /* 忽略 */ }
+
   setStatus('就緒');
 }
 

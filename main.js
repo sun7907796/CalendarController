@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -17,8 +17,11 @@ function userFile(name) {
 }
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const ICON_PATH = path.join(__dirname, 'build', 'icon.ico');
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,6 +30,7 @@ function createWindow() {
     minWidth: 820,
     minHeight: 560,
     title: '行事曆同步小工具',
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -35,17 +39,91 @@ function createWindow() {
   });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // 點視窗右上角叉叉時不結束程式，改為隱藏到系統匣
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+      // 首次隱藏時提示使用者程式仍在系統匣執行
+      if (tray && !mainWindow._trayHintShown) {
+        mainWindow._trayHintShown = true;
+        tray.displayBalloon &&
+          tray.displayBalloon({ title: '仍在背景執行', content: '行事曆小工具已縮小到系統匣，點圖示可再開啟。' });
+      }
+    }
+  });
+}
+
+function showWindow() {
+  if (!mainWindow) { createWindow(); return; }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  const image = nativeImage.createFromPath(ICON_PATH);
+  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
+  tray.setToolTip('行事曆同步小工具');
+  rebuildTrayMenu();
+  tray.on('double-click', showWindow);
+}
+
+// 免安裝(portable)版執行時會解壓到暫存目錄，須以 PORTABLE_EXECUTABLE_FILE
+// 指向的真實 exe 位置來註冊/查詢開機自啟，否則路徑會失效
+function loginItemOptions(extra) {
+  const opts = Object.assign({}, extra);
+  if (process.env.PORTABLE_EXECUTABLE_FILE) {
+    opts.path = process.env.PORTABLE_EXECUTABLE_FILE;
+    opts.args = [];
+  }
+  return opts;
+}
+
+function isAutoStartOn() {
+  return app.getLoginItemSettings(loginItemOptions()).openAtLogin;
+}
+
+function rebuildTrayMenu() {
+  if (!tray) return;
+  const menu = Menu.buildFromTemplate([
+    { label: '開啟主視窗', click: showWindow },
+    {
+      label: '開機時自動啟動',
+      type: 'checkbox',
+      checked: isAutoStartOn(),
+      click: (item) => setAutoStart(item.checked)
+    },
+    { type: 'separator' },
+    { label: '結束', click: () => { isQuitting = true; app.quit(); } }
+  ]);
+  tray.setContextMenu(menu);
+}
+
+function setAutoStart(enabled) {
+  app.setLoginItemSettings(loginItemOptions({ openAtLogin: !!enabled }));
+  rebuildTrayMenu();
+  // 同步通知渲染端更新勾選狀態
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app:autostart-changed', !!enabled);
+  }
 }
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    else showWindow();
   });
 });
 
+app.on('before-quit', () => { isQuitting = true; });
+
+// 縮小到系統匣後不因視窗關閉而結束程式；由系統匣選單「結束」才真正離開
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // 不在此結束，保留系統匣常駐
 });
 
 // ---------------------------------------------------------------------------
@@ -68,6 +146,27 @@ ipcMain.handle('events:load', () => readJson(userFile('events.json'), []));
 ipcMain.handle('events:save', (_e, events) => {
   writeJson(userFile('events.json'), events);
   return true;
+});
+
+// ---------------------------------------------------------------------------
+// 應用程式資訊 / 資料夾 / 開機自啟
+// ---------------------------------------------------------------------------
+ipcMain.handle('app:info', () => ({
+  version: app.getVersion(),
+  dataDir: app.getPath('userData')
+}));
+
+ipcMain.handle('app:open-data-dir', async () => {
+  const dir = app.getPath('userData');
+  await shell.openPath(dir);
+  return dir;
+});
+
+ipcMain.handle('app:get-autostart', () => isAutoStartOn());
+
+ipcMain.handle('app:set-autostart', (_e, enabled) => {
+  setAutoStart(enabled);
+  return isAutoStartOn();
 });
 
 // ---------------------------------------------------------------------------

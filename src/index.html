@@ -29,6 +29,8 @@
 
   <footer class="statusbar">
     <span id="statusMsg">就緒</span>
+    <span class="spacer"></span>
+    <label class="autostart"><input type="checkbox" id="autoStartChk" /> 開機時自動啟動</label>
   </footer>
 
   <!-- 事件編輯對話框 -->
@@ -114,7 +116,14 @@
 ├─ events.json        本機事件
 ├─ credentials.json   Google 憑證
 └─ token.json         Google 授權權杖</pre>
+        <p><button id="openDataDirBtn">開啟資料夾</button></p>
         <p class="note">重設 Google 連線：按「登出」；更換 Google 專案：重新「匯入憑證」即可。</p>
+
+        <h3>其他</h3>
+        <ul>
+          <li>點視窗右上角的 <b>✕</b> 不會結束程式，而是<b>縮小到系統匣</b>（右下角圖示）；在系統匣圖示按右鍵可「開啟主視窗」或「結束」。</li>
+          <li>勾選底部的 <b>「開機時自動啟動」</b>，登入 Windows 後會自動於背景開啟本工具。</li>
+        </ul>
 
         <h3>常見問題</h3>
         <ul>
@@ -124,6 +133,7 @@
         </ul>
       </div>
       <div class="modal-actions">
+        <span id="appVersion" class="version"></span>
         <span class="spacer"></span>
         <button id="helpCloseBtn" class="primary">關閉</button>
       </div>

@@ -18,7 +18,8 @@
       "main.js",
       "preload.js",
       "src/**/*",
-      "google/**/*"
+      "google/**/*",
+      "build/icon.ico"
     ],
     "win": {
       "icon": "build/icon.ico"

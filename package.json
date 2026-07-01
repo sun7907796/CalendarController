@@ -19,7 +19,10 @@
       "google/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "portable"
+    },
+    "portable": {
+      "artifactName": "CalendarController-${version}-portable.exe"
     }
   },
   "dependencies": {

@@ -7,7 +7,9 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist:installer": "electron-builder --win nsis -c.directories.output=dist/installer",
+    "dist:portable": "electron-builder --win portable -c.directories.output=dist/portable",
+    "dist": "npm run dist:installer && npm run dist:portable"
   },
   "build": {
     "appId": "com.deom.calendarcontroller",
@@ -19,7 +21,15 @@
       "google/**/*"
     ],
     "win": {
-      "target": "portable"
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "CalendarController-${version}-setup.exe"
     },
     "portable": {
       "artifactName": "CalendarController-${version}-portable.exe"

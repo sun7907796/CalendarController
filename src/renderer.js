@@ -7,6 +7,7 @@ let events = [];          // 全部事件
 let viewYear, viewMonth;  // 目前檢視的年 / 月（0-based）
 let editingId = null;     // 目前編輯中的事件 id（null 表示新增）
 let googleSignedIn = false;
+let selectedCalendarId = 'primary'; // 同步目標日曆
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -180,7 +181,7 @@ async function deleteEvent() {
 
   // 若已同步到 Google，一併從 Google 刪除
   if (ev.googleId && googleSignedIn) {
-    const r = await window.api.deleteGoogleEvent(ev.googleId);
+    const r = await window.api.deleteGoogleEvent({ googleId: ev.googleId, calendarId: ev.calendarId });
     if (!r.ok) setStatus('Google 端刪除失敗：' + (r.reason || '未知'));
   }
   events = events.filter((e) => e.id !== editingId);
@@ -211,6 +212,7 @@ async function refreshGoogleStatus() {
     signInBtn.classList.add('hidden');
     signOutBtn.classList.remove('hidden');
     syncBtn.disabled = false;
+    await loadCalendars();
   } else {
     statusEl.textContent = s.hasCredentials ? 'Google：已匯入憑證，待登入' : 'Google：未連線';
     statusEl.classList.remove('on');
@@ -218,7 +220,35 @@ async function refreshGoogleStatus() {
     signInBtn.disabled = !s.hasCredentials;
     signOutBtn.classList.add('hidden');
     syncBtn.disabled = true;
+    document.getElementById('calendarWrap').classList.add('hidden');
   }
+}
+
+// 載入帳號下所有日曆並填入下拉選單，還原上次選擇
+async function loadCalendars() {
+  const wrap = document.getElementById('calendarWrap');
+  const sel = document.getElementById('calendarSelect');
+  const r = await window.api.listCalendars();
+  if (!r.ok || !r.calendars || !r.calendars.length) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  const settings = await window.api.getSettings();
+  const saved = settings.calendarId;
+
+  sel.innerHTML = '';
+  r.calendars.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.summary + (c.primary ? '（主要）' : '');
+    sel.appendChild(opt);
+  });
+
+  const primary = r.calendars.find((c) => c.primary);
+  const exists = r.calendars.some((c) => c.id === saved);
+  selectedCalendarId = exists ? saved : (primary ? primary.id : r.calendars[0].id);
+  sel.value = selectedCalendarId;
+  wrap.classList.remove('hidden');
 }
 
 async function doImportCredentials() {
@@ -258,7 +288,7 @@ async function doSync() {
   const endD = new Date(viewYear, viewMonth + 2, 0); // 下下個月最後一天
   const rangeEnd = ymd(endD.getFullYear(), endD.getMonth(), endD.getDate());
 
-  const r = await window.api.sync({ events, rangeStart, rangeEnd });
+  const r = await window.api.sync({ events, rangeStart, rangeEnd, calendarId: selectedCalendarId });
   if (r.ok) {
     events = r.events;
     await persist();
@@ -324,6 +354,13 @@ function bindEvents() {
   document.getElementById('signInBtn').addEventListener('click', doSignIn);
   document.getElementById('signOutBtn').addEventListener('click', doSignOut);
   document.getElementById('syncBtn').addEventListener('click', doSync);
+
+  document.getElementById('calendarSelect').addEventListener('change', async (e) => {
+    selectedCalendarId = e.target.value;
+    await window.api.setSettings({ calendarId: selectedCalendarId });
+    const name = e.target.options[e.target.selectedIndex].text;
+    setStatus('同步目標日曆：' + name);
+  });
 
   document.getElementById('logCloseBtn').addEventListener('click', () => {
     document.getElementById('logModal').classList.add('hidden');

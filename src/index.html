@@ -20,6 +20,9 @@
       <button id="importBtn">匯入憑證</button>
       <button id="signInBtn">登入 Google</button>
       <button id="signOutBtn" class="hidden">登出</button>
+      <label id="calendarWrap" class="cal-wrap hidden">日曆
+        <select id="calendarSelect" title="選擇要同步的 Google 日曆"></select>
+      </label>
       <button id="syncBtn" class="primary" disabled>同步</button>
     </div>
   </header>
@@ -106,8 +109,10 @@
 
         <h3>同步說明</h3>
         <ul>
+          <li>登入後，工具列會出現 <b>日曆選單</b>，可選擇要同步的 Google 日曆（如「本人／家庭…」）。選擇會被記住。</li>
           <li>按「同步」會處理<b>目前檢視月份的前後各一個月</b>範圍。</li>
           <li>順序：先把本機事件推送到 Google，再把該範圍的 Google 事件拉回本機。</li>
+          <li>新事件會加入<b>目前選定的日曆</b>；已同步的事件則維持在它原本所屬的日曆更新。</li>
           <li>拉取只做新增與更新，<b>不會刪除</b>你 Google 上原有的行程。</li>
         </ul>
 

@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('api', {
   importCredentials: () => ipcRenderer.invoke('google:import-credentials'),
   signIn: () => ipcRenderer.invoke('google:signin'),
   signOut: () => ipcRenderer.invoke('google:signout'),
+  listCalendars: () => ipcRenderer.invoke('google:list-calendars'),
   sync: (payload) => ipcRenderer.invoke('google:sync', payload),
-  deleteGoogleEvent: (googleId) => ipcRenderer.invoke('google:delete-event', googleId)
+  deleteGoogleEvent: (arg) => ipcRenderer.invoke('google:delete-event', arg),
+
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (patch) => ipcRenderer.invoke('settings:set', patch)
 });

@@ -162,6 +162,15 @@ ipcMain.handle('app:open-data-dir', async () => {
   return dir;
 });
 
+// 設定檔（例如選定的目標日曆）
+ipcMain.handle('settings:get', () => readJson(userFile('settings.json'), {}));
+ipcMain.handle('settings:set', (_e, patch) => {
+  const cur = readJson(userFile('settings.json'), {});
+  const next = Object.assign({}, cur, patch);
+  writeJson(userFile('settings.json'), next);
+  return next;
+});
+
 ipcMain.handle('app:get-autostart', () => isAutoStartOn());
 
 ipcMain.handle('app:set-autostart', (_e, enabled) => {
@@ -282,6 +291,29 @@ ipcMain.handle('google:signin', async () => {
   });
 });
 
+// 列出使用者帳號下所有日曆（供選擇同步目標）
+ipcMain.handle('google:list-calendars', async () => {
+  const auth = getAuthedClientOrNull();
+  if (!auth) return { ok: false, reason: '尚未登入 Google' };
+  try {
+    const calendar = google.calendar({ version: 'v3', auth });
+    const resp = await calendar.calendarList.list({ maxResults: 250 });
+    const items = (resp.data.items || []).map((c) => ({
+      id: c.id,
+      summary: c.summaryOverride || c.summary,
+      primary: !!c.primary,
+      accessRole: c.accessRole,           // owner / writer / reader / freeBusyReader
+      backgroundColor: c.backgroundColor || null
+    }));
+    // 主要日曆排前面，其餘依名稱排序
+    items.sort((a, b) => (b.primary - a.primary) || String(a.summary).localeCompare(String(b.summary)));
+    return { ok: true, calendars: items };
+  } catch (err) {
+    const it = interpretGoogleError(err);
+    return { ok: false, reason: it.friendly, url: it.url || null };
+  }
+});
+
 ipcMain.handle('google:signout', () => {
   try {
     if (fs.existsSync(userFile('token.json'))) fs.unlinkSync(userFile('token.json'));
@@ -315,7 +347,7 @@ function localToGoogle(ev) {
   return body;
 }
 
-function googleToLocal(g) {
+function googleToLocal(g, calendarId) {
   const allDay = !!(g.start && g.start.date);
   let date, startTime = '', endTime = '';
   if (allDay) {
@@ -330,6 +362,7 @@ function googleToLocal(g) {
   return {
     id: 'g_' + g.id,
     googleId: g.id,
+    calendarId: calendarId || 'primary',
     title: g.summary || '(無標題)',
     description: g.description || '',
     location: g.location || '',
@@ -399,24 +432,28 @@ ipcMain.handle('google:sync', async (_e, payload) => {
   const log = [];
   let action = null; // 需要使用者處理的動作連結（例如啟用 API）
   let events = Array.isArray(payload.events) ? payload.events.slice() : [];
+  const targetCal = payload.calendarId || 'primary'; // 新事件要放入的目標日曆
 
   // 1. 推送本機事件
   for (const ev of events) {
     if (ev._deleted) continue;
     try {
       if (ev.googleId) {
+        // 已同步的事件維持在它原本所屬的日曆更新
         await calendar.events.update({
-          calendarId: 'primary',
+          calendarId: ev.calendarId || 'primary',
           eventId: ev.googleId,
           requestBody: localToGoogle(ev)
         });
         log.push(`更新：${ev.title}`);
       } else {
+        // 新事件放入目前選定的目標日曆
         const created = await calendar.events.insert({
-          calendarId: 'primary',
+          calendarId: targetCal,
           requestBody: localToGoogle(ev)
         });
         ev.googleId = created.data.id;
+        ev.calendarId = targetCal;
         log.push(`新增到 Google：${ev.title}`);
       }
     } catch (err) {
@@ -434,7 +471,7 @@ ipcMain.handle('google:sync', async (_e, payload) => {
     const timeMax = endD.toISOString();
 
     const resp = await calendar.events.list({
-      calendarId: 'primary',
+      calendarId: targetCal,
       timeMin,
       timeMax,
       singleEvents: true,
@@ -447,7 +484,7 @@ ipcMain.handle('google:sync', async (_e, payload) => {
 
     for (const g of resp.data.items || []) {
       if (g.status === 'cancelled') continue;
-      const converted = googleToLocal(g);
+      const converted = googleToLocal(g, targetCal);
       if (byGoogleId.has(g.id)) {
         // 已存在：以 Google 版本為準更新內容（保留本機 id）
         const existing = byGoogleId.get(g.id);
@@ -469,12 +506,15 @@ ipcMain.handle('google:sync', async (_e, payload) => {
 });
 
 // 刪除單一 Google 事件（本機刪除時呼叫）
-ipcMain.handle('google:delete-event', async (_e, googleId) => {
+ipcMain.handle('google:delete-event', async (_e, arg) => {
   const auth = getAuthedClientOrNull();
+  // 相容舊呼叫：arg 可能是字串(googleId) 或 { googleId, calendarId }
+  const googleId = typeof arg === 'string' ? arg : (arg && arg.googleId);
+  const calendarId = (typeof arg === 'object' && arg && arg.calendarId) || 'primary';
   if (!auth || !googleId) return { ok: false };
   try {
     const calendar = google.calendar({ version: 'v3', auth });
-    await calendar.events.delete({ calendarId: 'primary', eventId: googleId });
+    await calendar.events.delete({ calendarId, eventId: googleId });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e.message };

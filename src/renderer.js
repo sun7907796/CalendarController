@@ -249,6 +249,7 @@ async function refreshGoogleStatus() {
     signOutBtn.classList.add('hidden');
     syncBtn.disabled = true;
     document.getElementById('calendarWrap').classList.add('hidden');
+    document.getElementById('legend').classList.add('hidden');
   }
 }
 
@@ -282,6 +283,36 @@ async function loadCalendars() {
 
   // 取得日曆顏色後重繪，讓事件依日曆上色
   renderCalendar();
+  renderLegend();
+}
+
+// 顏色圖例：列出各日曆顏色與名稱，標記目前同步中的日曆
+function renderLegend() {
+  const el = document.getElementById('legend');
+  const ids = Object.keys(calendarMeta);
+  if (!googleSignedIn || !ids.length) {
+    el.innerHTML = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'legend-label';
+  label.textContent = '日曆';
+  el.appendChild(label);
+
+  ids.forEach((id) => {
+    const m = calendarMeta[id];
+    const item = document.createElement('span');
+    item.className = 'legend-item' + (id === selectedCalendarId ? ' active' : '');
+    const dot = document.createElement('span');
+    dot.className = 'cal-dot';
+    dot.style.background = m.color || '#c8d2eb';
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(m.summary + (id === selectedCalendarId ? '（同步中）' : '')));
+    el.appendChild(item);
+  });
+  el.classList.remove('hidden');
 }
 
 // 事件所屬日曆的顏色（無則回傳 null，改用預設樣式）
@@ -403,6 +434,7 @@ function bindEvents() {
     await window.api.setSettings({ calendarId: selectedCalendarId });
     const name = e.target.options[e.target.selectedIndex].text;
     setStatus('同步目標日曆：' + name);
+    renderLegend();
   });
 
   document.getElementById('logCloseBtn').addEventListener('click', () => {

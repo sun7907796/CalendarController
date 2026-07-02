@@ -352,6 +352,39 @@ function fmtLocalTime(d) {
 }
 
 // ---------------------------------------------------------------------------
+// 將 Google API 常見錯誤轉成中文友善提示（必要時附上處理連結）
+// ---------------------------------------------------------------------------
+function interpretGoogleError(err) {
+  const msg = (err && err.message) ? err.message : String(err);
+  // Calendar API 尚未啟用
+  if (/has not been used in project|it is disabled|accessNotConfigured/i.test(msg) && /calendar/i.test(msg)) {
+    const m = msg.match(/project\s+(\d+)/i);
+    const pid = m ? m[1] : null;
+    const url = pid
+      ? `https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=${pid}`
+      : 'https://console.cloud.google.com/apis/library/calendar-json.googleapis.com';
+    return {
+      friendly: `Google Calendar API 尚未在你的專案${pid ? '（' + pid + '）' : ''}啟用。請點下方按鈕開啟啟用頁、按「啟用」，等 1～3 分鐘後再同步一次。`,
+      url
+    };
+  }
+  // 授權失效
+  if (/invalid_grant|Token has been expired|invalid credentials|invalid_token/i.test(msg)) {
+    return { friendly: '授權已失效或過期，請按「登出」後重新「登入 Google」。' };
+  }
+  // 權限不足
+  if (/insufficient|Insufficient Permission|forbidden|PERMISSION_DENIED/i.test(msg)) {
+    return { friendly: '授權範圍不足，請「登出」後重新登入並同意所有存取權限。' };
+  }
+  return { friendly: msg };
+}
+
+ipcMain.handle('app:open-external', (_e, url) => {
+  if (url) shell.openExternal(url);
+  return true;
+});
+
+// ---------------------------------------------------------------------------
 // 雙向同步
 //   input: { events, rangeStart, rangeEnd }  (rangeStart/End 為 YYYY-MM-DD)
 //   步驟：
@@ -364,6 +397,7 @@ ipcMain.handle('google:sync', async (_e, payload) => {
 
   const calendar = google.calendar({ version: 'v3', auth });
   const log = [];
+  let action = null; // 需要使用者處理的動作連結（例如啟用 API）
   let events = Array.isArray(payload.events) ? payload.events.slice() : [];
 
   // 1. 推送本機事件
@@ -386,7 +420,9 @@ ipcMain.handle('google:sync', async (_e, payload) => {
         log.push(`新增到 Google：${ev.title}`);
       }
     } catch (err) {
-      log.push(`推送失敗（${ev.title}）：${err.message}`);
+      const it = interpretGoogleError(err);
+      log.push(`推送失敗（${ev.title}）：${it.friendly}`);
+      if (it.url) action = { url: it.url };
     }
   }
 
@@ -423,11 +459,13 @@ ipcMain.handle('google:sync', async (_e, payload) => {
       }
     }
   } catch (err) {
-    log.push('拉取 Google 事件失敗：' + err.message);
-    return { ok: false, reason: err.message, events, log };
+    const it = interpretGoogleError(err);
+    log.push('拉取 Google 事件失敗：' + it.friendly);
+    if (it.url) action = { url: it.url };
+    return { ok: false, reason: it.friendly, events, log, action };
   }
 
-  return { ok: true, events, log };
+  return { ok: true, events, log, action };
 });
 
 // 刪除單一 Google 事件（本機刪除時呼叫）

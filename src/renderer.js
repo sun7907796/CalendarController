@@ -263,19 +263,34 @@ async function doSync() {
     events = r.events;
     await persist();
     renderCalendar();
-    showLog(r.log);
+    showLog(r.log, r.action);
     setStatus('同步完成');
   } else {
     if (r.events) { events = r.events; await persist(); renderCalendar(); }
     setStatus('同步失敗：' + (r.reason || ''));
-    if (r.log) showLog(r.log);
+    showLog(r.log, r.action);
   }
   syncBtn.disabled = false;
 }
 
-function showLog(log) {
+function showLog(log, action) {
   const content = (log && log.length) ? log.join('\n') : '沒有變更。';
   document.getElementById('logContent').textContent = content;
+
+  // 若有需要處理的動作（例如啟用 API），顯示一顆可開啟連結的按鈕
+  const actionBox = document.getElementById('logAction');
+  actionBox.innerHTML = '';
+  if (action && action.url) {
+    const btn = document.createElement('button');
+    btn.className = 'primary';
+    btn.textContent = '前往啟用 Google Calendar API';
+    btn.addEventListener('click', () => window.api.openExternal(action.url));
+    actionBox.appendChild(btn);
+    actionBox.classList.remove('hidden');
+  } else {
+    actionBox.classList.add('hidden');
+  }
+
   document.getElementById('logModal').classList.remove('hidden');
 }
 

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
 
   appInfo: () => ipcRenderer.invoke('app:info'),
   openDataDir: () => ipcRenderer.invoke('app:open-data-dir'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   getAutoStart: () => ipcRenderer.invoke('app:get-autostart'),
   setAutoStart: (enabled) => ipcRenderer.invoke('app:set-autostart', enabled),
   onAutoStartChanged: (cb) => ipcRenderer.on('app:autostart-changed', (_e, v) => cb(v)),

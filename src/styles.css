@@ -134,6 +134,7 @@ button.danger:hover { opacity: 0.9; }
 }
 .statusbar .autostart input { margin: 0; cursor: pointer; }
 .version { font-size: 12px; color: var(--muted); }
+.log-action { margin: 0 0 12px; }
 
 .modal {
   position: fixed;

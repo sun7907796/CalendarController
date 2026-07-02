@@ -8,6 +8,7 @@ let viewYear, viewMonth;  // 目前檢視的年 / 月（0-based）
 let editingId = null;     // 目前編輯中的事件 id（null 表示新增）
 let googleSignedIn = false;
 let selectedCalendarId = 'primary'; // 同步目標日曆
+let calendarMeta = {};              // { [calendarId]: { summary, color } }
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -85,6 +86,13 @@ function renderCalendar() {
     shown.forEach((ev) => {
       const el = document.createElement('div');
       el.className = 'ev' + (ev.googleId ? ' google' : '');
+      const c = calColor(ev);
+      if (c) {
+        el.style.background = c + '22';        // 淡色底（8 位 hex 帶透明度）
+        el.style.borderLeft = '3px solid ' + c;
+        const nm = calName(ev);
+        if (nm) el.title = nm + '：' + (ev.title || '');
+      }
       if (!ev.allDay && ev.startTime) {
         const t = document.createElement('span');
         t.className = 't';
@@ -126,7 +134,7 @@ function openModal(id, presetDate) {
   document.getElementById('fDesc').value = ev ? (ev.description || '') : '';
 
   document.getElementById('deleteBtn').classList.toggle('hidden', !ev);
-  document.getElementById('gLink').classList.toggle('hidden', !(ev && ev.googleId));
+  updateGLink(ev);
   toggleTimeRow();
 
   document.getElementById('modal').classList.remove('hidden');
@@ -136,6 +144,26 @@ function openModal(id, presetDate) {
 function closeModal() {
   document.getElementById('modal').classList.add('hidden');
   editingId = null;
+}
+
+// 在編輯視窗顯示事件所屬日曆（含顏色）或同步狀態
+function updateGLink(ev) {
+  const gLink = document.getElementById('gLink');
+  gLink.innerHTML = '';
+  if (ev && ev.googleId) {
+    const name = calName(ev);
+    const color = calColor(ev);
+    if (color) {
+      const dot = document.createElement('span');
+      dot.className = 'cal-dot';
+      dot.style.background = color;
+      gLink.appendChild(dot);
+    }
+    gLink.appendChild(document.createTextNode(name ? '日曆：' + name : '已與 Google 同步'));
+    gLink.classList.remove('hidden');
+  } else {
+    gLink.classList.add('hidden');
+  }
 }
 
 function toggleTimeRow() {
@@ -237,11 +265,13 @@ async function loadCalendars() {
   const saved = settings.calendarId;
 
   sel.innerHTML = '';
+  calendarMeta = {};
   r.calendars.forEach((c) => {
     const opt = document.createElement('option');
     opt.value = c.id;
     opt.textContent = c.summary + (c.primary ? '（主要）' : '');
     sel.appendChild(opt);
+    calendarMeta[c.id] = { summary: c.summary, color: c.backgroundColor || null };
   });
 
   const primary = r.calendars.find((c) => c.primary);
@@ -249,6 +279,19 @@ async function loadCalendars() {
   selectedCalendarId = exists ? saved : (primary ? primary.id : r.calendars[0].id);
   sel.value = selectedCalendarId;
   wrap.classList.remove('hidden');
+
+  // 取得日曆顏色後重繪，讓事件依日曆上色
+  renderCalendar();
+}
+
+// 事件所屬日曆的顏色（無則回傳 null，改用預設樣式）
+function calColor(ev) {
+  const m = ev.calendarId && calendarMeta[ev.calendarId];
+  return (m && m.color) ? m.color : null;
+}
+function calName(ev) {
+  const m = ev.calendarId && calendarMeta[ev.calendarId];
+  return m ? m.summary : null;
 }
 
 async function doImportCredentials() {

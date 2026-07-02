@@ -134,6 +134,7 @@ function openModal(id, presetDate) {
   document.getElementById('fDesc').value = ev ? (ev.description || '') : '';
 
   document.getElementById('deleteBtn').classList.toggle('hidden', !ev);
+  populateEventCalendarSelect(ev);
   updateGLink(ev);
   toggleTimeRow();
 
@@ -144,6 +145,46 @@ function openModal(id, presetDate) {
 function closeModal() {
   document.getElementById('modal').classList.add('hidden');
   editingId = null;
+}
+
+// 事件編輯視窗：填入可寫入的日曆供選擇
+function populateEventCalendarSelect(ev) {
+  const row = document.getElementById('fCalendarRow');
+  const sel = document.getElementById('fCalendar');
+  const writable = Object.keys(calendarMeta).filter((id) => {
+    const r = calendarMeta[id].accessRole;
+    return r === 'owner' || r === 'writer';
+  });
+
+  // 未登入或沒有可寫入的日曆 → 隱藏（事件僅存於本機）
+  if (!googleSignedIn || !writable.length) {
+    row.classList.add('hidden');
+    sel.innerHTML = '';
+    return;
+  }
+
+  sel.innerHTML = '';
+  writable.forEach((id) => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = calendarMeta[id].summary;
+    sel.appendChild(opt);
+  });
+
+  let val = (ev && ev.calendarId) ? ev.calendarId : selectedCalendarId;
+  // 事件原屬日曆為唯讀（不在可寫清單）→ 補一個唯讀選項並維持顯示
+  if (ev && ev.calendarId && !writable.includes(ev.calendarId)) {
+    const opt = document.createElement('option');
+    opt.value = ev.calendarId;
+    const meta = calendarMeta[ev.calendarId];
+    opt.textContent = (meta ? meta.summary : ev.calendarId) + '（唯讀）';
+    sel.appendChild(opt);
+    val = ev.calendarId;
+  } else if (!writable.includes(val)) {
+    val = writable.includes(selectedCalendarId) ? selectedCalendarId : writable[0];
+  }
+  sel.value = val;
+  row.classList.remove('hidden');
 }
 
 // 在編輯視窗顯示事件所屬日曆（含顏色）或同步狀態
@@ -188,11 +229,26 @@ async function saveEvent() {
     updatedAt: new Date().toISOString()
   };
 
+  // 使用者選擇的日曆（選單有顯示時）
+  const calRow = document.getElementById('fCalendarRow');
+  const chosenCal = calRow.classList.contains('hidden') ? null : document.getElementById('fCalendar').value;
+
   if (editingId) {
     const ev = events.find((e) => e.id === editingId);
     Object.assign(ev, data);
+    if (chosenCal) {
+      if (ev.googleId) {
+        // 已同步事件改選日曆 → 標記待移動（同步時處理）
+        if (chosenCal !== ev.calendarId) ev._moveTo = chosenCal;
+        else delete ev._moveTo;
+      } else {
+        ev.calendarId = chosenCal;
+      }
+    }
   } else {
-    events.push(Object.assign({ id: uuid(), googleId: null }, data));
+    const ev = Object.assign({ id: uuid(), googleId: null }, data);
+    if (chosenCal) ev.calendarId = chosenCal;
+    events.push(ev);
   }
 
   await persist();
@@ -272,7 +328,7 @@ async function loadCalendars() {
     opt.value = c.id;
     opt.textContent = c.summary + (c.primary ? '（主要）' : '');
     sel.appendChild(opt);
-    calendarMeta[c.id] = { summary: c.summary, color: c.backgroundColor || null };
+    calendarMeta[c.id] = { summary: c.summary, color: c.backgroundColor || null, accessRole: c.accessRole };
   });
 
   const primary = r.calendars.find((c) => c.primary);

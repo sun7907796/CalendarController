@@ -42,6 +42,7 @@
     <div class="modal-box">
       <h2 id="modalTitle">新增事件</h2>
       <label>標題<input type="text" id="fTitle" /></label>
+      <label id="fCalendarRow">日曆<select id="fCalendar"></select></label>
       <label>日期<input type="date" id="fDate" /></label>
       <label class="checkbox"><input type="checkbox" id="fAllDay" /> 全天</label>
       <div id="timeRow" class="time-row">
@@ -113,7 +114,8 @@
           <li>登入後，工具列會出現 <b>日曆選單</b>，可選擇要同步的 Google 日曆（如「本人／家庭…」）。選擇會被記住。</li>
           <li>按「同步」會處理<b>目前檢視月份的前後各一個月</b>範圍。</li>
           <li>順序：先把本機事件推送到 Google，再把該範圍的 Google 事件拉回本機。</li>
-          <li>新事件會加入<b>目前選定的日曆</b>；已同步的事件則維持在它原本所屬的日曆更新。</li>
+          <li>新增／編輯事件時，可在視窗的 <b>「日曆」</b> 欄直接指定要放到哪個日曆；未指定則用工具列選定的日曆。</li>
+          <li>編輯已同步的事件並改選其他日曆，下次同步會自動將它 <b>移動</b> 到新日曆。</li>
           <li>拉取只做新增與更新，<b>不會刪除</b>你 Google 上原有的行程。</li>
         </ul>
 

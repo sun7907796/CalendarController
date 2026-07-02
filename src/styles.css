@@ -192,7 +192,7 @@ button.danger:hover { opacity: 0.9; }
 .modal-box h2 { margin: 0 0 16px; font-size: 18px; }
 .modal-box label { display: block; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
 .modal-box label.checkbox { display: flex; align-items: center; gap: 6px; color: var(--text); }
-.modal-box input[type=text], .modal-box input[type=date], .modal-box input[type=time], .modal-box textarea {
+.modal-box input[type=text], .modal-box input[type=date], .modal-box input[type=time], .modal-box textarea, .modal-box select {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -201,6 +201,7 @@ button.danger:hover { opacity: 0.9; }
   border-radius: 8px;
   font: inherit;
   color: var(--text);
+  background: #fff;
 }
 .modal-box .checkbox input { width: auto; margin: 0; }
 .time-row { display: flex; gap: 10px; }

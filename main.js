@@ -439,21 +439,34 @@ ipcMain.handle('google:sync', async (_e, payload) => {
     if (ev._deleted) continue;
     try {
       if (ev.googleId) {
-        // 已同步的事件維持在它原本所屬的日曆更新
+        let curCal = ev.calendarId || 'primary';
+        // 使用者在編輯視窗改選了其他日曆 → 先移動事件
+        if (ev._moveTo && ev._moveTo !== curCal) {
+          await calendar.events.move({
+            calendarId: curCal,
+            eventId: ev.googleId,
+            destination: ev._moveTo
+          });
+          curCal = ev._moveTo;
+          ev.calendarId = curCal;
+          log.push(`移動到日曆：${ev.title}`);
+        }
+        delete ev._moveTo;
         await calendar.events.update({
-          calendarId: ev.calendarId || 'primary',
+          calendarId: curCal,
           eventId: ev.googleId,
           requestBody: localToGoogle(ev)
         });
         log.push(`更新：${ev.title}`);
       } else {
-        // 新事件放入目前選定的目標日曆
+        // 新事件放入該事件指定的日曆，未指定則用目前選定的目標日曆
+        const dest = ev.calendarId || targetCal;
         const created = await calendar.events.insert({
-          calendarId: targetCal,
+          calendarId: dest,
           requestBody: localToGoogle(ev)
         });
         ev.googleId = created.data.id;
-        ev.calendarId = targetCal;
+        ev.calendarId = dest;
         log.push(`新增到 Google：${ev.title}`);
       }
     } catch (err) {

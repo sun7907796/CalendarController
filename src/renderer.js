@@ -355,7 +355,7 @@ function renderLegend() {
   el.innerHTML = '';
   const label = document.createElement('span');
   label.className = 'legend-label';
-  label.textContent = '日曆';
+  label.textContent = '日曆群組';
   el.appendChild(label);
 
   ids.forEach((id) => {

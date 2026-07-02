@@ -439,21 +439,19 @@ ipcMain.handle('google:sync', async (_e, payload) => {
     if (ev._deleted) continue;
     try {
       if (ev.googleId) {
-        let curCal = ev.calendarId || 'primary';
-        // 使用者在編輯視窗改選了其他日曆 → 先移動事件
-        if (ev._moveTo && ev._moveTo !== curCal) {
+        const destCal = ev.calendarId || 'primary';
+        // 事件在 Google 上的原位置與目標日曆不同 → 先移動
+        if (ev._moveFrom !== undefined && ev._moveFrom !== destCal) {
           await calendar.events.move({
-            calendarId: curCal,
+            calendarId: ev._moveFrom,
             eventId: ev.googleId,
-            destination: ev._moveTo
+            destination: destCal
           });
-          curCal = ev._moveTo;
-          ev.calendarId = curCal;
           log.push(`移動到日曆：${ev.title}`);
         }
-        delete ev._moveTo;
+        delete ev._moveFrom;
         await calendar.events.update({
-          calendarId: curCal,
+          calendarId: destCal,
           eventId: ev.googleId,
           requestBody: localToGoogle(ev)
         });

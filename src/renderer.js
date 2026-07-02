@@ -236,14 +236,15 @@ async function saveEvent() {
   if (editingId) {
     const ev = events.find((e) => e.id === editingId);
     Object.assign(ev, data);
-    if (chosenCal) {
+    if (chosenCal && chosenCal !== ev.calendarId) {
       if (ev.googleId) {
-        // 已同步事件改選日曆 → 標記待移動（同步時處理）
-        if (chosenCal !== ev.calendarId) ev._moveTo = chosenCal;
-        else delete ev._moveTo;
-      } else {
-        ev.calendarId = chosenCal;
+        // 記住 Google 上目前的位置（供同步時移動），若尚未記錄才寫入
+        if (ev._moveFrom === undefined) ev._moveFrom = ev.calendarId;
       }
+      // 立即更新所屬日曆，讓畫面（顏色、名稱）馬上反映
+      ev.calendarId = chosenCal;
+      // 若又改回原始位置，取消移動標記
+      if (ev._moveFrom === ev.calendarId) delete ev._moveFrom;
     }
   } else {
     const ev = Object.assign({ id: uuid(), googleId: null }, data);

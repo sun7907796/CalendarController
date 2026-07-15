@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.log
 
+# 參考用的獨立 Vue3 專案，不納入本 repo
+CalendarController-main-Vue3/
+src/_preview.html
+
 # 使用者本機憑證與資料（切勿提交）
 credentials.json
 token.json

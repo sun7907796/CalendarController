@@ -150,6 +150,20 @@ export class GoogleCalendarManager {
     } as any)
   }
 
+  // 將事件從一個日曆移動到另一個日曆
+  async moveEvent(fromCalendarId: string, eventId: string, toCalendarId: string): Promise<any> {
+    const auth = await this.authorize()
+    const calendar = google.calendar({ version: 'v3', auth })
+
+    const response = await calendar.events.move({
+      calendarId: fromCalendarId,
+      eventId,
+      destination: toCalendarId
+    } as any)
+
+    return response.data
+  }
+
   isAuthenticated(): boolean {
     return fs.existsSync(this.tokenPath)
   }

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Event } from '../types'
 import { electronAPI } from '../services/ipc'
+import { useToast } from '../composables/useToast'
 
 function generateLocalEventId(): string {
   return 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
@@ -11,6 +12,7 @@ export const useEventsStore = defineStore('events', () => {
   const events = ref<Event[]>([])
   const currentMonth = ref(new Date())
   const loading = ref(false)
+  const { show: showToast } = useToast()
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const d = new Date()
@@ -80,18 +82,7 @@ export const useEventsStore = defineStore('events', () => {
     await saveEvents()
 
     // 推送新事件到 Google
-    try {
-      const created = await electronAPI.google.createEvent({
-        calendarId: newEvent.calendarId || 'primary',
-        event: convertToGoogleFormat(newEvent)
-      })
-      if (created.ok && created.id) {
-        newEvent.googleId = created.id
-        await saveEvents()
-      }
-    } catch (err) {
-      console.error('推送新事件到 Google 失敗:', err)
-    }
+    await pushEventToGoogle(newEvent)
 
     return newEvent
   }
@@ -99,45 +90,59 @@ export const useEventsStore = defineStore('events', () => {
   async function updateEvent(id: string, updates: Partial<Event>) {
     const idx = events.value.findIndex(e => e.id === id)
     if (idx >= 0) {
-      const oldEvent = events.value[idx]
+      const before = { ...events.value[idx] }
       events.value[idx] = {
-        ...oldEvent,
+        ...before,
         ...updates,
         updatedAt: new Date().toISOString()
       }
       const newEvent = events.value[idx]
-      await saveEvents()
 
-      // 推送修改到 Google
-      await pushEventToGoogle(oldEvent, newEvent)
+      // 若已同步且改選了其他日曆 → 記住原始日曆（供移動用）
+      const beforeCal = before.calendarId || 'primary'
+      const afterCal = newEvent.calendarId || 'primary'
+      if (newEvent.googleId && afterCal !== beforeCal && newEvent._moveFrom === undefined) {
+        newEvent._moveFrom = beforeCal
+      }
+
+      await saveEvents()
+      await pushEventToGoogle(newEvent)
     }
   }
 
-  async function pushEventToGoogle(oldEvent: Event, newEvent: Event) {
-    if (!newEvent.googleId) {
-      // 新事件，創建到 Google
-      try {
-        const created = await electronAPI.google.createEvent({
-          calendarId: newEvent.calendarId || 'primary',
-          event: convertToGoogleFormat(newEvent)
-        })
-        if (created.ok && created.id) {
-          newEvent.googleId = created.id
+  // 將單一事件推送到 Google（新增 / 更新 / 移動日曆），失敗時提示並保留待同步標記
+  async function pushEventToGoogle(ev: Event) {
+    const body = convertToGoogleFormat(ev)
+    if (!body) return
+
+    if (!ev.googleId) {
+      // 新事件 → 建立到 Google
+      const created = await electronAPI.google.createEvent({
+        calendarId: ev.calendarId || 'primary',
+        event: body
+      })
+      if (created.ok && created.id) {
+        ev.googleId = created.id
+        await saveEvents()
+      } else if (!created.ok) {
+        showToast('推送到 Google 失敗：' + (created.reason || '未知'))
+      }
+    } else {
+      // 既有事件 → 更新（必要時連同移動到新日曆）
+      const res = await electronAPI.google.updateEvent({
+        calendarId: ev.calendarId || 'primary',
+        googleId: ev.googleId,
+        event: body,
+        fromCalendarId: ev._moveFrom
+      })
+      if (res.ok) {
+        if (ev._moveFrom !== undefined) {
+          delete ev._moveFrom
           await saveEvents()
         }
-      } catch (err) {
-        console.error('推送新事件失敗:', err)
-      }
-    } else if (oldEvent.googleId === newEvent.googleId) {
-      // 現有 Google 事件，更新
-      try {
-        await electronAPI.google.updateEvent({
-          calendarId: newEvent.calendarId || 'primary',
-          googleId: newEvent.googleId,
-          event: convertToGoogleFormat(newEvent)
-        })
-      } catch (err) {
-        console.error('更新 Google 事件失敗:', err)
+      } else {
+        // 保留 _moveFrom，讓下次「同步」可重試移動
+        showToast('更新 Google 失敗：' + (res.reason || '未知'))
       }
     }
   }
@@ -237,10 +242,13 @@ export const useEventsStore = defineStore('events', () => {
 
     // 如果是 Google 事件，從 Google 刪除
     if (event?.googleId) {
-      await electronAPI.google.deleteEvent({
+      const res = await electronAPI.google.deleteEvent({
         googleId: event.googleId,
         calendarId: event.calendarId || 'primary'
       })
+      if (res && !res.ok) {
+        showToast('從 Google 刪除失敗：' + (res.reason || '未知'))
+      }
     }
   }
 

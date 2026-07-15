@@ -19,8 +19,13 @@
       <button @click="handleSignout" class="px-3 py-1 text-xs bg-red-500 dark:bg-red-600 hover:bg-red-600 dark:hover:bg-red-700 text-white rounded transition whitespace-nowrap flex-shrink-0">登出</button>
     </div>
 
-    <div v-if="googleStore.syncError" class="text-red-600 dark:text-red-400 text-xs flex items-center gap-1">
+    <div v-if="googleStore.syncError" class="text-red-600 dark:text-red-400 text-xs flex items-center gap-2 max-w-md">
       <span>⚠️ {{ googleStore.syncError }}</span>
+      <button
+        v-if="googleStore.syncAction"
+        @click="openAction"
+        class="px-2 py-1 bg-blue-500 dark:bg-blue-600 hover:bg-blue-600 dark:hover:bg-blue-700 text-white rounded transition whitespace-nowrap flex-shrink-0"
+      >前往啟用 Google Calendar API</button>
     </div>
   </div>
 </template>
@@ -32,12 +37,19 @@ import { useToast } from '../composables/useToast'
 import { useGoogleStore } from '../stores/google'
 import { useEventsStore } from '../stores/events'
 import { useAppStore } from '../stores/app'
+import { electronAPI } from '../services/ipc'
 
 const { open } = useDialog()
 const { show } = useToast()
 const googleStore = useGoogleStore()
 const eventsStore = useEventsStore()
 const appStore = useAppStore()
+
+function openAction() {
+  if (googleStore.syncAction?.url) {
+    electronAPI.app.openExternal(googleStore.syncAction.url)
+  }
+}
 
 const selectedCalendarId = computed({
   get: () => googleStore.targetCalendarId,

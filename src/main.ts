@@ -201,6 +201,30 @@ function googleToLocal(g: any, calendarId: string) {
   }
 }
 
+// 將 Google API 常見錯誤轉成中文友善提示（必要時附上處理連結）
+function interpretGoogleError(err: any): { friendly: string; url?: string } {
+  const msg = (err && err.message) ? err.message : String(err)
+  // Calendar API 尚未啟用
+  if (/has not been used in project|it is disabled|accessNotConfigured/i.test(msg) && /calendar/i.test(msg)) {
+    const m = msg.match(/project\s+(\d+)/i)
+    const pid = m ? m[1] : null
+    const url = pid
+      ? `https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=${pid}`
+      : 'https://console.cloud.google.com/apis/library/calendar-json.googleapis.com'
+    return {
+      friendly: `Google Calendar API 尚未在你的專案${pid ? '（' + pid + '）' : ''}啟用。請點按鈕開啟啟用頁、按「啟用」，等 1～3 分鐘後再同步一次。`,
+      url
+    }
+  }
+  if (/invalid_grant|Token has been expired|invalid credentials|invalid_token/i.test(msg)) {
+    return { friendly: '授權已失效或過期，請按「登出」後重新「登入 Google」。' }
+  }
+  if (/insufficient|Insufficient Permission|forbidden|PERMISSION_DENIED/i.test(msg)) {
+    return { friendly: '授權範圍不足或該日曆為唯讀，請改用有編輯權的日曆，或重新登入並同意所有權限。' }
+  }
+  return { friendly: msg }
+}
+
 // IPC 事件：事件管理
 ipcMain.handle('events:load', () => readJson(userFile('events.json'), []))
 ipcMain.handle('events:save', (_e, events) => {
@@ -367,28 +391,51 @@ ipcMain.handle('google:sync', async (_e, payload: any) => {
   if (!googleManager) return { ok: false, reason: 'Google manager not initialized' }
 
   const log: string[] = []
+  let action: { url: string } | null = null
 
   try {
-    const calendarId = payload.calendarId || 'primary'
+    const target = payload.calendarId || 'primary'
     const rangeStart = payload.rangeStart
     const rangeEnd = payload.rangeEnd
 
-    log.push(`開始同步日曆: ${calendarId}`)
-    log.push(`時間範圍: ${rangeStart} 至 ${rangeEnd}`)
-
-    // Get local events
     const eventsFilePath = userFile('events.json')
-    let localEvents = readJson(eventsFilePath, [])
-    console.log(`[google:sync] 從 ${eventsFilePath} 讀取 ${localEvents.length} 個事件`)
-    log.push(`本地有 ${localEvents.length} 個事件`)
+    let localEvents: any[] = readJson(eventsFilePath, [])
+    let changed = false
 
-    // 拉取 Google 事件（單向同步 - Google 為準）
-    console.log(`[google:sync] 開始從 Google 拉取事件...`)
-    const googleEvents = await googleManager.getEvents(calendarId, rangeStart, rangeEnd)
-    log.push(`Google Calendar 中有 ${googleEvents.length} 個事件`)
-    console.log(`[google:sync] 獲取 ${googleEvents.length} 個 Google 事件`)
+    // 1) 推送：把「屬於此日曆」的本機事件送到 Google（新增 / 待移動）
+    //    已同步事件的一般內容更新由即時推送處理，這裡負責補推與移動。
+    for (const ev of localEvents) {
+      if (ev._deleted) continue
+      const evCal = ev.calendarId || target
+      if (evCal !== target) continue // 只處理屬於目前同步日曆的事件
 
-    // Create a map for quick lookup
+      try {
+        if (!ev.googleId) {
+          // 尚未同步 → 新增到 Google
+          const created = await googleManager.createEvent(target, localToGoogle(ev))
+          ev.googleId = created.id
+          ev.calendarId = target
+          changed = true
+          log.push(`新增到 Google：${ev.title}`)
+        } else if (ev._moveFrom !== undefined && ev._moveFrom !== target) {
+          // 有待處理的移動（例如離線時改了日曆）
+          await googleManager.moveEvent(ev._moveFrom, ev.googleId, target)
+          await googleManager.updateEvent(target, ev.googleId, localToGoogle(ev))
+          delete ev._moveFrom
+          changed = true
+          log.push(`移動並更新：${ev.title}`)
+        }
+      } catch (err) {
+        const it = interpretGoogleError(err)
+        log.push(`推送失敗（${ev.title}）：${it.friendly}`)
+        if (it.url) action = { url: it.url }
+      }
+    }
+
+    // 2) 拉取：從 Google 取回此日曆事件，合併回本機（以 googleId 對應）
+    const googleEvents = await googleManager.getEvents(target, rangeStart, rangeEnd)
+    log.push(`Google（${target}）有 ${googleEvents.length} 個事件`)
+
     const byGoogleId = new Map()
     for (const ev of localEvents) {
       if (ev.googleId) byGoogleId.set(ev.googleId, ev)
@@ -397,37 +444,28 @@ ipcMain.handle('google:sync', async (_e, payload: any) => {
     let pulledCount = 0
     for (const g of googleEvents) {
       if (g.status === 'cancelled') continue
-      const converted = googleToLocal(g, calendarId)
+      const converted = googleToLocal(g, target)
       if (byGoogleId.has(g.id)) {
-        // 已存在：以 Google 版本為準更新內容（保留本機 id）
         const existing = byGoogleId.get(g.id)
-        Object.assign(existing, converted, { id: existing.id })
-        console.log(`  [拉取] 更新: ${converted.title}`)
+        // 保留本機 id 與待移動標記
+        Object.assign(existing, converted, { id: existing.id, _moveFrom: existing._moveFrom })
       } else {
-        // 新事件從 Google 匯入
         localEvents.push(converted)
         byGoogleId.set(g.id, converted)
-        console.log(`  [拉取] 新增: ${converted.title}`)
-        log.push(`從 Google 匯入：${converted.title}`)
         pulledCount++
       }
     }
 
-    if (pulledCount > 0) {
-      writeJson(eventsFilePath, localEvents)
-    }
-
-    if (pulledCount > 0) {
-      log.push(`從 Google 匯入：${pulledCount} 個新事件`)
-    } else {
-      log.push('沒有新的變更')
-    }
+    if (pulledCount > 0) log.push(`從 Google 匯入：${pulledCount} 個新事件`)
+    if (changed || pulledCount > 0) writeJson(eventsFilePath, localEvents)
+    if (!changed && pulledCount === 0) log.push('沒有新的變更')
 
     log.push('同步完成')
-    return { ok: true, log }
+    return { ok: !action, reason: action ? '部分項目推送失敗，請見下方說明' : undefined, log, action }
   } catch (err) {
-    log.push(`錯誤: ${(err as Error).message}`)
-    return { ok: false, reason: (err as Error).message, log }
+    const it = interpretGoogleError(err)
+    log.push(`錯誤：${it.friendly}`)
+    return { ok: false, reason: it.friendly, log, action: it.url ? { url: it.url } : action }
   }
 })
 
@@ -438,22 +476,26 @@ ipcMain.handle('google:create-event', async (_e, payload: any) => {
     return { ok: true, id: created.id }
   } catch (err) {
     console.error('創建 Google 事件失敗:', err)
-    return { ok: false, reason: (err as Error).message }
+    const it = interpretGoogleError(err)
+    return { ok: false, reason: it.friendly, url: it.url || null }
   }
 })
 
 ipcMain.handle('google:update-event', async (_e, payload: any) => {
   if (!googleManager) return { ok: false, reason: 'Google manager not initialized' }
+  const calendarId = payload.calendarId || 'primary'
+  const fromCalendarId = payload.fromCalendarId
   try {
-    await googleManager.updateEvent(
-      payload.calendarId || 'primary',
-      payload.googleId,
-      payload.event
-    )
+    // 使用者改選了其他日曆 → 先把事件移動到新日曆
+    if (fromCalendarId && fromCalendarId !== calendarId) {
+      await googleManager.moveEvent(fromCalendarId, payload.googleId, calendarId)
+    }
+    await googleManager.updateEvent(calendarId, payload.googleId, payload.event)
     return { ok: true }
   } catch (err) {
     console.error('更新 Google 事件失敗:', err)
-    return { ok: false, reason: (err as Error).message }
+    const it = interpretGoogleError(err)
+    return { ok: false, reason: it.friendly, url: it.url || null }
   }
 })
 
@@ -467,7 +509,8 @@ ipcMain.handle('google:delete-event', async (_e, arg: any) => {
     return { ok: true }
   } catch (err) {
     console.error('刪除 Google 事件失敗:', err)
-    return { ok: false, reason: (err as Error).message }
+    const it = interpretGoogleError(err)
+    return { ok: false, reason: it.friendly, url: it.url || null }
   }
 })
 

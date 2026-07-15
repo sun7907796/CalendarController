@@ -7,6 +7,16 @@
             <ElInput v-model="form.title" placeholder="事件標題" required />
           </div>
 
+          <div v-if="writableCalendars.length">
+            <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">日曆群組</label>
+            <select
+              v-model="form.calendarId"
+              class="w-full px-2 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white"
+            >
+              <option v-for="cal in writableCalendars" :key="cal.id" :value="cal.id">{{ cal.summary }}</option>
+            </select>
+          </div>
+
           <div>
             <!-- 全天事件：只顯示日期 -->
             <div v-if="form.allDay" class="flex gap-2">
@@ -57,6 +67,7 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElDatePicker, ElTimePicker, ElInput, ElSwitch } from 'element-plus'
 import { useEventsStore } from '../stores/events'
+import { useGoogleStore } from '../stores/google'
 import { useDialog } from '../composables/useDialog'
 
 const props = defineProps<{
@@ -70,6 +81,7 @@ const emit = defineEmits<{
 }>()
 
 const eventsStore = useEventsStore()
+const googleStore = useGoogleStore()
 const { open } = useDialog()
 
 const form = reactive({
@@ -80,10 +92,16 @@ const form = reactive({
   location: '',
   startTime: '09:00',
   endTime: '10:00',
-  allDay: false
+  allDay: false,
+  calendarId: ''
 })
 
 const isEditing = computed(() => !!props.eventId)
+
+// 只列出可寫入（擁有者/可編輯）的日曆供選擇
+const writableCalendars = computed(() =>
+  googleStore.calendars.filter(c => c.accessRole === 'owner' || c.accessRole === 'writer')
+)
 
 onMounted(() => {
   if (props.eventId) {
@@ -100,6 +118,10 @@ onMounted(() => {
         form.startTime = event.startTime.substring(11, 16)
       }
     }
+  }
+  // 未指定日曆時，預設為工具列選定的目標日曆
+  if (!form.calendarId) {
+    form.calendarId = googleStore.targetCalendarId || (writableCalendars.value[0]?.id ?? '')
   }
 })
 
@@ -126,7 +148,8 @@ async function handleSubmit() {
       location: form.location,
       startTime,
       endTime,
-      allDay: form.allDay
+      allDay: form.allDay,
+      calendarId: form.calendarId || undefined
     })
   } else {
     await eventsStore.addEvent({
@@ -137,6 +160,7 @@ async function handleSubmit() {
       startTime,
       endTime,
       allDay: form.allDay,
+      calendarId: form.calendarId || undefined,
       updatedAt: new Date().toISOString()
     })
   }

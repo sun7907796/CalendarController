@@ -1,0 +1,205 @@
+:root {
+  /* 淺色模式 */
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e2e5ea;
+  --text: #1f2430;
+  --muted: #8a91a0;
+  --primary: #3b6ef5;
+  --primary-dark: #2f59cc;
+  --danger: #e5484d;
+  --today: #fff4d6;
+  --event: #e3ecff;
+  --event-google: #d8f3e0;
+
+  /* Element Plus 淺色模式 */
+  --el-input-border-color: #e2e5ea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* 深色模式 */
+    --bg: #1a1f2e;
+    --panel: #25293a;
+    --border: #3a3f4d;
+    --text: #e8eaed;
+    --muted: #9ca3af;
+    --primary: #5b8aff;
+    --primary-dark: #4a75dd;
+    --danger: #ef5350;
+    --today: #332b1a;
+    --event: #1e3a5f;
+    --event-google: #1a3a2a;
+
+    /* Element Plus 深色模式 */
+    --el-input-border-color: #4b5563;
+  }
+}
+
+html.dark {
+  --el-input-border-color: #4b5563;
+  --el-bg-color: #1a1f2e;
+  --el-fill-color-blank: #25293a;
+  --el-fill-color-light: #2d3139;
+  --el-fill-color-darker: #1f2937;
+  --el-text-color-primary: #e8eaed;
+  --el-text-color-regular: #9ca3af;
+  --el-border-color: #3a3f4d;
+  --el-border-color-light: #4b5563;
+  --el-overlay-color-lighter: rgba(0, 0, 0, 0.7);
+  --el-overlay-color: rgba(0, 0, 0, 0.9);
+  --el-popper-bg-color-light: #25293a;
+}
+
+html.dark .el-picker-panel {
+  background-color: #25293a !important;
+}
+
+html.dark .el-date-table__header td {
+  border-bottom: 1px solid #3a3f4d !important;
+  color: #9ca3af !important;
+}
+
+html.dark .el-date-table td {
+  border: none !important;
+}
+
+html.dark .el-date-table td.available:hover {
+  background-color: #2d3139 !important;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-weight: 600;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  padding: 6px 12px;
+  /* border: 1px solid var(--border); */
+  border-radius: 8px;
+  background: var(--panel);
+  cursor: pointer;
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+button:hover {
+  background: var(--border);
+  opacity: 0.8;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+button.primary:hover {
+  background: var(--primary-dark);
+  opacity: 1;
+}
+
+button.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+input[type=text],
+input[type=date],
+input[type=time],
+textarea,
+select {
+  font: inherit;
+  /* padding: 8px 10px; */
+  /* border: 1px solid var(--border); */
+  border-radius: 6px;
+  width: 100%;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 34, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* .modal-content {
+  background: var(--panel);
+  border-radius: 14px;
+  padding: 22px;
+  width: 420px;
+  max-width: 92vw;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+
+.modal-content h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+} */
+
+label {
+  display: block;
+  /* margin-bottom: 12px; */
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+input[type=checkbox] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Element Plus 深色模式支持 */
+html.dark {
+  color-scheme: dark;
+}
+
+.el-checkbox {
+  margin-right: 0px;
+}
+
+/* Element Plus 輸入框統一寬度 */
+/* .el-input {
+  width: 180px;
+} */
+
+.el-date-editor {
+  --el-date-editor-width: 180px !important;
+}

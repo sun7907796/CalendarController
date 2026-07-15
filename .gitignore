@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-release/
 *.log
 
 # 參考用的獨立 Vue3 專案，不納入本 repo

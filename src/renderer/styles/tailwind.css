@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* 手動主題：以 html.dark 類別切換深色（不自動跟隨系統）*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light dark;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+}

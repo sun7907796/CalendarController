@@ -4,6 +4,8 @@ import path from 'path'
 
 export default defineConfig({
   root: path.resolve(__dirname, 'src/renderer'),
+  // 以相對路徑輸出資源，Electron 以 file:// 載入才找得到 assets（否則畫面全白）
+  base: './',
   plugins: [vue()],
   css: {
     postcss: './postcss.config.js'

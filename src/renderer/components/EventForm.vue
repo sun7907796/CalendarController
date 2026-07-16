@@ -103,20 +103,28 @@ const writableCalendars = computed(() =>
   googleStore.calendars.filter(c => c.accessRole === 'owner' || c.accessRole === 'writer')
 )
 
+// 取 HH:mm（相容完整 ISO 或已是 HH:mm）
+function toHHmm(t?: string): string {
+  if (!t) return ''
+  return t.includes('T') ? t.substring(11, 16) : t
+}
+
 onMounted(() => {
   if (props.eventId) {
     const event = eventsStore.events.find(e => e.id === props.eventId)
     if (event) {
-      Object.assign(form, event)
-      // 提取結束日期
-      if (event.endTime && event.endTime.includes('T')) {
-        form.endDate = event.endTime.substring(0, 10)
-        form.endTime = event.endTime.substring(11, 16)
-      }
-      // 轉換時間格式從 ISO 時間戳到 HH:mm
-      if (event.startTime && event.startTime.includes('T')) {
-        form.startTime = event.startTime.substring(11, 16)
-      }
+      form.title = event.title || ''
+      form.description = event.description || ''
+      form.location = event.location || ''
+      form.allDay = !!event.allDay
+      form.calendarId = event.calendarId || ''
+      form.date = (event.date || props.date).slice(0, 10)
+      // 結束日期：優先 endDate，其次舊資料 endTime 內含的日期，最後同開始日
+      form.endDate = (event.endDate
+        || (event.endTime && event.endTime.includes('T') ? event.endTime.slice(0, 10) : '')
+        || form.date).slice(0, 10)
+      form.startTime = toHHmm(event.startTime) || '09:00'
+      form.endTime = toHHmm(event.endTime) || '10:00'
     }
   }
   // 未指定日曆時，預設為工具列選定的目標日曆
@@ -126,43 +134,31 @@ onMounted(() => {
 })
 
 async function handleSubmit() {
-  // 轉換時間回完整格式
-  let startTime = form.startTime
-  let endTime = form.endTime
+  const startDate = (form.date || '').slice(0, 10)
+  // 結束日期不得早於開始日期
+  let endDate = (form.endDate || startDate).slice(0, 10)
+  if (endDate < startDate) endDate = startDate
 
-  if (!form.allDay) {
-    // 如果是 HH:mm 格式，轉換回 YYYY-MM-DDTHH:mm:00
-    if (startTime && startTime.length === 5) {
-      startTime = `${form.date}T${startTime}:00`
-    }
-    if (endTime && endTime.length === 5) {
-      endTime = `${form.endDate}T${endTime}:00`
-    }
+  // 時間一律存 HH:mm；全天則留空
+  const startTime = form.allDay ? '' : form.startTime
+  const endTime = form.allDay ? '' : form.endTime
+
+  const payload = {
+    date: startDate,
+    endDate,
+    title: form.title,
+    description: form.description,
+    location: form.location,
+    startTime,
+    endTime,
+    allDay: form.allDay,
+    calendarId: form.calendarId || undefined
   }
 
   if (isEditing.value && props.eventId) {
-    await eventsStore.updateEvent(props.eventId, {
-      date: form.date,
-      title: form.title,
-      description: form.description,
-      location: form.location,
-      startTime,
-      endTime,
-      allDay: form.allDay,
-      calendarId: form.calendarId || undefined
-    })
+    await eventsStore.updateEvent(props.eventId, payload)
   } else {
-    await eventsStore.addEvent({
-      title: form.title,
-      description: form.description,
-      location: form.location,
-      date: form.date,
-      startTime,
-      endTime,
-      allDay: form.allDay,
-      calendarId: form.calendarId || undefined,
-      updatedAt: new Date().toISOString()
-    })
+    await eventsStore.addEvent({ ...payload, updatedAt: new Date().toISOString() })
   }
   emit('save')
   emit('close')

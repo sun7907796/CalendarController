@@ -186,7 +186,9 @@ function dateNum(dateStr: string): number {
 }
 
 function formatTime(timeStr: string): string {
-  return timeStr.substring(11, 16)
+  if (!timeStr) return ''
+  // 相容完整 ISO（YYYY-MM-DDTHH:mm）與 HH:mm
+  return timeStr.includes('T') ? timeStr.substring(11, 16) : timeStr
 }
 
 function getEventsForDate(dateStr: string) {

@@ -6,9 +6,10 @@ export interface Event {
   title: string
   description: string
   location: string
-  date: string
-  startTime: string
-  endTime: string
+  date: string        // 開始日期 YYYY-MM-DD
+  endDate?: string    // 結束日期 YYYY-MM-DD（含當日；跨天用，單日可省略）
+  startTime: string   // HH:mm（全天為空）
+  endTime: string     // HH:mm（全天為空）
   allDay: boolean
   updatedAt: string
   _deleted?: boolean

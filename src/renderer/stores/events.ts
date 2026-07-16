@@ -8,6 +8,19 @@ function generateLocalEventId(): string {
   return 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
 }
 
+// 取時間的 HH:mm 部分（相容舊資料：完整 ISO 或已是 HH:mm）
+function timePart(t?: string): string {
+  if (!t) return ''
+  return t.includes('T') ? t.substring(11, 16) : t
+}
+
+// 推導事件的結束日期（含當日）；相容舊資料
+function deriveEndDate(ev: Event): string {
+  if (ev.endDate) return ev.endDate
+  if (ev.endTime && ev.endTime.includes('T')) return ev.endTime.substring(0, 10)
+  return ev.date
+}
+
 export const useEventsStore = defineStore('events', () => {
   const events = ref<Event[]>([])
   const currentMonth = ref(new Date())
@@ -21,28 +34,27 @@ export const useEventsStore = defineStore('events', () => {
 
   const eventsByDate = computed(() => {
     const map = new Map<string, Event[]>()
+    const push = (dateStr: string, ev: Event) => {
+      if (!map.has(dateStr)) map.set(dateStr, [])
+      map.get(dateStr)!.push(ev)
+    }
 
     for (const event of events.value) {
-      const startDate = new Date(event.date)
-      const endDate = new Date(event.endTime?.split('T')[0] || event.date)
+      const startStr = (event.date || '').slice(0, 10)
+      const endStr = deriveEndDate(event).slice(0, 10)
+      const start = new Date(startStr + 'T00:00:00')
+      const end = new Date(endStr + 'T00:00:00')
 
-      // 如果是多天的全天事件，展開到每一天（endDate 不包含，遵循 ISO 8601）
-      if (event.allDay && event.endTime && startDate < endDate) {
-        const currentDate = new Date(startDate)
-        while (currentDate < endDate) {
-          const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`
-          if (!map.has(dateStr)) {
-            map.set(dateStr, [])
-          }
-          map.get(dateStr)!.push(event)
-          currentDate.setDate(currentDate.getDate() + 1)
+      // 跨天事件（全天或時段）展開到每一天（含結束當日）
+      if (endStr > startStr && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        const cur = new Date(start)
+        while (cur <= end) {
+          const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+          push(dateStr, event)
+          cur.setDate(cur.getDate() + 1)
         }
       } else {
-        // 單天事件或時間事件
-        if (!map.has(event.date)) {
-          map.set(event.date, [])
-        }
-        map.get(event.date)!.push(event)
+        push(startStr, event)
       }
     }
     return map
@@ -153,84 +165,33 @@ export const useEventsStore = defineStore('events', () => {
       description: event.description || '',
       location: event.location || ''
     }
+
+    const startStr = (event.date || '').slice(0, 10)
+    if (!startStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      console.error('Invalid start date:', event.date)
+      return null
+    }
+    const endStr = deriveEndDate(event).slice(0, 10)
+
     if (event.allDay) {
-      // 全天事件：只需要日期
-      let dateStr = event.date
-
-      // 確保日期格式正確 (YYYY-MM-DD)，移除時區信息
-      if (!dateStr || typeof dateStr !== 'string') {
-        console.error('Invalid date for all-day event:', event.date)
-        return null
-      }
-
-      // 只取日期部分 (YYYY-MM-DD)
-      dateStr = dateStr.slice(0, 10)
-      if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        console.error('Invalid date format for all-day event:', event.date)
-        return null
-      }
-
-      const start = dateStr
-      try {
-        const startDate = new Date(dateStr + 'T00:00:00Z')
-        const endDate = new Date(startDate)
-        endDate.setDate(endDate.getDate() + 1)
-        const end = endDate.toISOString().slice(0, 10)
-        body.start = { date: start }
-        body.end = { date: end }
-      } catch (err) {
-        console.error('Error processing all-day event date:', err, 'Input:', dateStr)
-        return null
-      }
+      // 全天事件：Google 的 end.date 為排他，需 +1 天
+      const endExclusive = new Date(endStr + 'T00:00:00')
+      endExclusive.setDate(endExclusive.getDate() + 1)
+      const end = `${endExclusive.getFullYear()}-${String(endExclusive.getMonth() + 1).padStart(2, '0')}-${String(endExclusive.getDate()).padStart(2, '0')}`
+      body.start = { date: startStr }
+      body.end = { date: end }
     } else {
-      // 非全天事件：必須有有效的時間
-      let dateStr = event.date
-
-      // 確保日期格式正確 (YYYY-MM-DD)，移除時區信息
-      if (!dateStr || typeof dateStr !== 'string') {
-        console.error('Invalid date:', event.date)
+      // 時段事件：可跨天（結束用 endDate）
+      const s = timePart(event.startTime).match(/^\d{2}:\d{2}$/) ? timePart(event.startTime) : '09:00'
+      const e = timePart(event.endTime).match(/^\d{2}:\d{2}$/) ? timePart(event.endTime) : '10:00'
+      const startDate = new Date(startStr + 'T' + s + ':00')
+      const endDate = new Date(endStr + 'T' + e + ':00')
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.error('Invalid date/time', { startStr, endStr, s, e })
         return null
       }
-
-      // 只取日期部分 (YYYY-MM-DD)
-      dateStr = dateStr.slice(0, 10)
-      if (!dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        console.error('Invalid date format:', event.date)
-        return null
-      }
-
-      // 提取時間，確保格式是 HH:mm
-      let startTimeStr = event.startTime
-      let endTimeStr = event.endTime
-
-      if (startTimeStr && startTimeStr.includes('T')) {
-        startTimeStr = startTimeStr.slice(11, 16)
-      } else if (!startTimeStr || !startTimeStr.match(/^\d{2}:\d{2}$/)) {
-        startTimeStr = '09:00'
-      }
-
-      if (endTimeStr && endTimeStr.includes('T')) {
-        endTimeStr = endTimeStr.slice(11, 16)
-      } else if (!endTimeStr || !endTimeStr.match(/^\d{2}:\d{2}$/)) {
-        endTimeStr = '10:00'
-      }
-
-      console.log('Creating event with date:', dateStr, 'startTime:', startTimeStr, 'endTime:', endTimeStr)
-
-      try {
-        const startDate = new Date(dateStr + 'T' + startTimeStr + ':00')
-        const endDate = new Date(dateStr + 'T' + endTimeStr + ':00')
-
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error('Invalid date/time')
-        }
-
-        body.start = { dateTime: startDate.toISOString() }
-        body.end = { dateTime: endDate.toISOString() }
-      } catch (err) {
-        console.error('Error creating date:', err, 'Input:', { dateStr, startTimeStr, endTimeStr })
-        return null
-      }
+      body.start = { dateTime: startDate.toISOString() }
+      body.end = { dateTime: endDate.toISOString() }
     }
     return body
   }

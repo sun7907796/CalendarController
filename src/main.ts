@@ -152,37 +152,59 @@ function fmtLocalTime(d: Date): string {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
 }
 
+// 取 HH:mm（相容完整 ISO 或已是 HH:mm）
+function timePart(t: string): string {
+  if (!t) return ''
+  return t.includes('T') ? t.substring(11, 16) : t
+}
+
+function deriveEndDateStr(ev: any): string {
+  if (ev.endDate) return String(ev.endDate).slice(0, 10)
+  if (ev.endTime && String(ev.endTime).includes('T')) return String(ev.endTime).slice(0, 10)
+  return ev.date
+}
+
 function localToGoogle(ev: any) {
   const body: any = {
     summary: ev.title || '(無標題)',
     description: ev.description || '',
     location: ev.location || ''
   }
+  const startStr = String(ev.date).slice(0, 10)
+  const endStr = deriveEndDateStr(ev)
   if (ev.allDay) {
-    const start = ev.date
-    const endDate = new Date(ev.date + 'T00:00:00')
-    endDate.setDate(endDate.getDate() + 1)
-    const end = endDate.toISOString().slice(0, 10)
-    body.start = { date: start }
-    body.end = { date: end }
+    // Google 全天 end.date 為排他 → +1 天
+    const endExclusive = new Date(endStr + 'T00:00:00')
+    endExclusive.setDate(endExclusive.getDate() + 1)
+    body.start = { date: startStr }
+    body.end = { date: fmtLocalDate(endExclusive) }
   } else {
-    const s = ev.startTime || '09:00'
-    const e = ev.endTime || ev.startTime || '10:00'
-    body.start = { dateTime: new Date(ev.date + 'T' + s + ':00').toISOString() }
-    body.end = { dateTime: new Date(ev.date + 'T' + e + ':00').toISOString() }
+    const s = timePart(ev.startTime) || '09:00'
+    const e = timePart(ev.endTime) || s || '10:00'
+    body.start = { dateTime: new Date(startStr + 'T' + s + ':00').toISOString() }
+    body.end = { dateTime: new Date(endStr + 'T' + e + ':00').toISOString() }
   }
   return body
 }
 
 function googleToLocal(g: any, calendarId: string) {
   const allDay = !!(g.start && g.start.date)
-  let date = '', startTime = '', endTime = ''
+  let date = '', endDate = '', startTime = '', endTime = ''
   if (allDay) {
     date = g.start.date
+    // Google 全天 end.date 為排他 → 轉回含當日的結束日（-1 天）
+    if (g.end && g.end.date) {
+      const endIncl = new Date(g.end.date + 'T00:00:00')
+      endIncl.setDate(endIncl.getDate() - 1)
+      endDate = fmtLocalDate(endIncl)
+    } else {
+      endDate = date
+    }
   } else {
     const sd = new Date(g.start.dateTime)
     const ed = g.end && g.end.dateTime ? new Date(g.end.dateTime) : sd
     date = fmtLocalDate(sd)
+    endDate = fmtLocalDate(ed)
     startTime = fmtLocalTime(sd)
     endTime = fmtLocalTime(ed)
   }
@@ -194,6 +216,7 @@ function googleToLocal(g: any, calendarId: string) {
     description: g.description || '',
     location: g.location || '',
     date,
+    endDate,
     startTime,
     endTime,
     allDay,

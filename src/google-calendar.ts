@@ -54,6 +54,16 @@ export class GoogleCalendarManager {
       auth.setCredentials(token)
     }
 
+    // 權杖被自動更新時存回檔案，並保留原有的 refresh_token
+    auth.on('tokens', (tokens) => {
+      const existing = this.loadToken() || {}
+      const merged: any = { ...existing, ...tokens }
+      if (!tokens.refresh_token && existing.refresh_token) {
+        merged.refresh_token = existing.refresh_token
+      }
+      this.saveToken(merged)
+    })
+
     return auth
   }
 
@@ -70,6 +80,7 @@ export class GoogleCalendarManager {
     const auth = this.getAuth()
     return auth.generateAuthUrl({
       access_type: 'offline',
+      prompt: 'consent', // 強制取得 refresh_token（否則重開機後 access_token 過期需重新登入）
       scope: SCOPES
     })
   }

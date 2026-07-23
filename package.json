@@ -1,6 +1,6 @@
 {
   "name": "calendar-controller",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "桌面行事曆小工具（Vue3），可編輯行程並與 Google 日曆同步",
   "main": "dist/main.js",
   "scripts": {

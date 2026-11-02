@@ -32,7 +32,9 @@ export class GoogleCalendarManager {
     fs.writeFileSync(this.tokenPath, JSON.stringify(token, null, 2))
   }
 
-  private getAuth(): OAuth2Client {
+  // redirectUri 必須與登入時啟動的本機回呼伺服器完全一致（含埠號），
+  // 否則 Google 會把瀏覽器導回錯誤的位址，導致拿不到授權碼而卡住。
+  private getAuth(redirectUri: string = 'http://127.0.0.1'): OAuth2Client {
     const credentials = this.loadCredentials()
     if (!credentials) {
       throw new Error('Credentials file not found')
@@ -46,7 +48,7 @@ export class GoogleCalendarManager {
     const auth = new google.auth.OAuth2(
       key.client_id,
       key.client_secret,
-      'http://localhost'
+      redirectUri
     )
 
     const token = this.loadToken()
@@ -76,8 +78,8 @@ export class GoogleCalendarManager {
     return auth
   }
 
-  getAuthUrl(): string {
-    const auth = this.getAuth()
+  getAuthUrl(redirectUri: string): string {
+    const auth = this.getAuth(redirectUri)
     return auth.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent', // 強制取得 refresh_token（否則重開機後 access_token 過期需重新登入）
@@ -85,8 +87,9 @@ export class GoogleCalendarManager {
     })
   }
 
-  async handleAuthCallback(code: string): Promise<void> {
-    const auth = this.getAuth()
+  async handleAuthCallback(code: string, redirectUri: string): Promise<void> {
+    // 換取權杖時所用的 redirectUri 必須與 getAuthUrl 相同，否則 Google 會回 redirect_uri_mismatch。
+    const auth = this.getAuth(redirectUri)
     const { tokens } = await auth.getToken(code)
     auth.setCredentials(tokens)
     this.saveToken(tokens)

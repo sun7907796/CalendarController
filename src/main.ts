@@ -317,58 +317,83 @@ ipcMain.handle('google:import-credentials', async () => {
 ipcMain.handle('google:signin', async () => {
   if (!googleManager) return { ok: false, reason: 'Google manager not initialized' }
 
+  let server: http.Server | null = null
   try {
-    const authUrl = await googleManager.getAuthUrl()
+    return await new Promise<{ ok: boolean; reason?: string }>((resolve) => {
+      let settled = false
+      let redirectUri = ''
+      let timer: NodeJS.Timeout | null = null
 
-    // Start a simple HTTP server to listen for OAuth callback
-    const server = http.createServer(async (req, res) => {
-      const url = new URL(req.url || '', 'http://localhost')
-      const code = url.searchParams.get('code')
+      const finish = (result: { ok: boolean; reason?: string }) => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        try { server?.close() } catch { }
+        resolve(result)
+      }
 
-      if (code) {
+      // 本機回呼伺服器：接收 Google 導回的授權碼
+      server = http.createServer(async (req, res) => {
         try {
-          await googleManager.handleAuthCallback(code)
+          const url = new URL(req.url || '', redirectUri || 'http://127.0.0.1')
+          const code = url.searchParams.get('code')
+          const authError = url.searchParams.get('error')
+
+          if (authError) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
+            res.end(`授權被拒絕：${authError}`)
+            finish({ ok: false, reason: `授權被拒絕：${authError}` })
+            return
+          }
+
+          if (!code) {
+            // 瀏覽器可能先來要 favicon 等，忽略而不結束流程
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
+            res.end('缺少授權碼')
+            return
+          }
+
+          await googleManager!.handleAuthCallback(code, redirectUri)
           res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
-          res.end('認證成功！您可以關閉此窗口。')
-          server.close()
+          res.end('認證成功！您可以關閉此視窗，回到行事曆小工具。')
+          finish({ ok: true })
         } catch (err) {
           res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
-          res.end(`認證失敗: ${(err as Error).message}`)
-          server.close()
+          res.end(`認證失敗：${(err as Error).message}`)
+          finish({ ok: false, reason: (err as Error).message })
         }
-      } else {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end('缺少授權碼')
-      }
-    })
-
-    await new Promise<void>((resolve) => {
-      server.listen(80, 'localhost', () => {
-        resolve()
       })
-      server.on('error', () => {
-        // 如果 80 埠被占用，試試其他埠
-        server.listen(3000, 'localhost', () => {
-          resolve()
-        })
+
+      // 伺服器無法啟動（例如埠被占用）時，立即回報而不是卡住
+      server.on('error', (err) => {
+        finish({ ok: false, reason: `無法啟動本機授權伺服器：${(err as Error).message}` })
       })
+
+      // 綁定 127.0.0.1 的隨機可用埠，避免與 80/3000 等常用埠衝突；
+      // redirectUri 由實際取得的埠號組成，確保與 Google 導回位址一致。
+      server.listen(0, '127.0.0.1', async () => {
+        try {
+          const addr = server!.address()
+          const port = (addr && typeof addr === 'object') ? addr.port : 0
+          if (!port) {
+            finish({ ok: false, reason: '無法取得本機授權伺服器埠號' })
+            return
+          }
+          redirectUri = `http://127.0.0.1:${port}`
+          const authUrl = googleManager!.getAuthUrl(redirectUri)
+          await shell.openExternal(authUrl)
+        } catch (err) {
+          finish({ ok: false, reason: (err as Error).message })
+        }
+      })
+
+      // 最多等待 3 分鐘，逾時即結束，避免視窗一直卡在登入中
+      timer = setTimeout(() => {
+        finish({ ok: false, reason: '驗證逾時，請重新登入 Google' })
+      }, 180000)
     })
-
-    // Open auth URL in default browser
-    await shell.openExternal(authUrl)
-
-    // Wait for token file to be created (max 2 minutes)
-    for (let i = 0; i < 120; i++) {
-      if (fs.existsSync(userFile('token.json'))) {
-        server.close()
-        return { ok: true }
-      }
-      await new Promise(r => setTimeout(r, 1000))
-    }
-
-    server.close()
-    return { ok: false, reason: '驗證超時' }
   } catch (err) {
+    try { server?.close() } catch { }
     return { ok: false, reason: (err as Error).message }
   }
 })
